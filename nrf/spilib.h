@@ -30,8 +30,9 @@ typedef struct {
     uint8_t mode;
 } SPI_Settings;
 
-
+void spibegin();
 void spi_master_init(SPI_Settings spi_st){
+    spibegin();
     DDR_SPI |= (1<<DD_MOSI) | (1<<DD_SCK);
     uint8_t ctrl_reg = SPCR;
     ctrl_reg = (1<<SPE)|(1<<MSTR);
@@ -150,6 +151,7 @@ void spibegin(){
     SREG = sreg;
     
 }
+
 static uint8_t spi_transfer(uint8_t data){
     SPDR = data;
     /*
@@ -158,7 +160,8 @@ static uint8_t spi_transfer(uint8_t data){
      * about 10% more speed, even if it seems counter-intuitive. At lower
      * speeds it is unnoticed.
      */
-     while (!(SPSR & _BV(SPIF))) ; // wait
+     while (!(SPSR & (1 << SPIF))) ; // wait
      return SPDR;
 }
+
 #endif      //SPIMOD

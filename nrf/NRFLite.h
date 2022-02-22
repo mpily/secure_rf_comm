@@ -78,7 +78,7 @@ const static uint8_t MAX_NRF_CHANNEL = 125;//MAX CHANNEL NUMBER
     uint8_t _useTwoPinSpiTransfer, _usingSeparateCeAndCsnPins;
     uint16_t _transmissionRetryWaitMicros, _maxHasDataIntervalMicros;
     int16_t _lastToRadioId = -1;
-    uint32_t _microsSinceLastDataCheck;
+    uint64_t _microsSinceLastDataCheck;
     
     uint8_t getPipeOfFirstRxPacket();
     uint8_t getRxPacketLength();
@@ -101,12 +101,12 @@ const static uint8_t MAX_NRF_CHANNEL = 125;//MAX CHANNEL NUMBER
 #include<util/delay.h>
 #include<stdlib.h>
 #include"../lcd/lcd_i2c.h"
+#include"../lcd/main_timer.h"
 uint8_t radio_init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitrate, uint8_t channel, uint8_t callSpiBegin)
 {
-    lcd_print("began init");
-    NRF_spi_settings.prescaler_divider = 2;
+    NRF_spi_settings.prescaler_divider = 4;
     NRF_spi_settings.MSB_first = 1;
-    NRF_spi_settings.mode = 0;
+    NRF_spi_settings.mode = 0x00;
     _cePin = cePin;
     _csnPin = csnPin;
     _useTwoPinSpiTransfer = 0;
@@ -114,7 +114,8 @@ uint8_t radio_init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitr
     // Default states for the radio pins.  When CSN is LOW the radio listens to SPI communication,
     // so we operate most of the time with CSN HIGH.
     // currently connecting CSN AND CE TO PORT D .
-    DDRB |= (1 << _cePin) | (1 << _csnPin);
+    DDRB |= (1 << _cePin) ;
+    DDRB |= (1 << _csnPin);
     PORTB |= (1 << _csnPin);
         if (callSpiBegin)
         {
@@ -122,7 +123,7 @@ uint8_t radio_init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitr
             // for Master SPI operation, but in case it started as LOW, we'll set it back.
             uint8_t savedSS = PORTB & (1 << SS);
             spibegin();
-            if (_csnPin != SS && 0) {
+            if (_csnPin != SS) {
                 if(savedSS){
                     PORTB |= (1 << SS);
                 }
@@ -131,16 +132,12 @@ uint8_t radio_init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitr
                 }
             }
         }
-    lcd_clear();
-    lcd_print("done pins");
     // With the microcontroller's pins setup, we can now initialize the radio.
     uint8_t success = initRadio(radioId, bitrate, channel);
     return success;
 }
 uint8_t initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
 {
-    lcd_clear();
-    lcd_print("begin radio");
     _lastToRadioId = -1;
     _resetInterruptFlags = 1;
     _usingSeparateCeAndCsnPins = _cePin != _csnPin;
@@ -150,7 +147,6 @@ uint8_t initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
     // Valid channel range is 2400 - 2525 MHz, in 1 MHz increments.
     if (channel > MAX_NRF_CHANNEL) { channel = MAX_NRF_CHANNEL; }
     writeRegisterName(RF_CH, channel);
-
     // Transmission speed, retry times, and output power setup.
     // For 2 Mbps or 1 Mbps operation, a 500 uS retry time is necessary to support the max ACK packet size.
     // For 250 Kbps operation, a 1500 uS retry time is necessary.
@@ -178,7 +174,6 @@ uint8_t initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
         _transmissionRetryWaitMicros = 1600;  // 100 more than the retry delay
         _maxHasDataIntervalMicros = 5000;
     }
-
     // Assign this radio's address to RX pipe 1.  When another radio sends us data, this is the address
     // it will use.  We use RX pipe 1 to store our address since the address in RX pipe 0 is reserved
     // for use with auto-acknowledgment packets.
@@ -194,17 +189,12 @@ uint8_t initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
     writeRegisterName(FEATURE, (1 << EN_DPL) | (1 << EN_ACK_PAY) | (1 << EN_DYN_ACK));
 
     // Ensure RX and TX buffers are empty.  Each buffer can hold 3 packets.
-    spiTransfer(WRITE_OPERATION, FLUSH_RX, 0, 0);
-    spiTransfer(WRITE_OPERATION, FLUSH_TX, 0, 0);
+    spiTransfer(WRITE_OPERATION, FLUSH_RX, NULL, 0);
+    spiTransfer(WRITE_OPERATION, FLUSH_TX, NULL, 0);
 
     // Clear any interrupts.
     writeRegisterName(STATUS_NRF, (1 << RX_DR) | (1 << TX_DS) | (1 << MAX_RT));
     //debug;
-    lcd_clear();
-    lcd_print("done radio");
-    _delay_ms(500);
-    lcd_clear();
-    printDetails();
     uint8_t success = startRx();
     return success;
 }
@@ -223,7 +213,7 @@ uint8_t startRx()
     // Wait for the transition into RX mode.
     _delay_ms(POWERDOWN_TO_RXTX_MODE_MILLIS);
 
-    uint8_t inRxMode = readRegisterName(CONFIG) == CONFIG_REG_SETTINGS_FOR_RX_MODE;
+    uint8_t inRxMode = (readRegisterName(CONFIG) == CONFIG_REG_SETTINGS_FOR_RX_MODE);
     return inRxMode;
 }
 uint8_t waitForTxToComplete()
@@ -291,16 +281,8 @@ void readData (void * data){
     uint8_t statusReg = readRegisterName(STATUS_NRF);
     if (statusReg & 1 << (RX_DR))
     {
-        writeRegisterName(STATUS_NRF, statusReg | _BV(RX_DR));
+        writeRegisterName(STATUS_NRF, statusReg | (1 << RX_DR));
     }
-}
-void powerDown(){
-    // IF we have separ
-    if(_usingSeparateCeAndCsnPins){
-        DDRB &= (~(1 << _cePin));
-    }
-    // Turn off the radio.
-    writeRegisterName(CONFIG,readRegisterName(CONFIG) & (~(1 << PWR_UP)));
 }
 void printDetails(){
     printRegister("CONFIG", readRegisterName(CONFIG));
@@ -334,21 +316,39 @@ void printRegister(const char name[], uint8_t regName){
     _delay_ms(500);
     lcd_clear();
 }
+void assert(uint8_t fact){
+	if(fact){
+		return;
+	}
+	else{
+		lcd_clear();
+		lcd_print("not_true");
+		while(1);
+	}
+}
 uint8_t scanChannel(uint8_t channel, uint8_t measurementCount){
+    uint8_t notInRxMode = readRegisterName(CONFIG) != CONFIG_REG_SETTINGS_FOR_RX_MODE;
+    if(notInRxMode){
+        startRx();
+    }
     uint8_t strength = 0;
+    uint8_t seen_something = 0;
     //Put radio into Standby-I mode.
     PORTB &= (~(1 << _cePin));
     writeRegisterName(RF_CH, channel);
+    //assert(readRegisterName(RF_CH) == channel);
     do{
         PORTB |= (1 << _cePin);
         _delay_us(400);
         PORTB &= (~(1 << _cePin));
         uint8_t signalWasReceived = readRegisterName(CD);
         if (signalWasReceived){
+            seen_something = 1;
             strength ++;
         }
     
-    } while(measurementCount--);    
+    } while(measurementCount--);   
+    
     return strength;
 }
 uint8_t readRegisterName(uint8_t regName){
@@ -367,24 +367,232 @@ void writeRegister(uint8_t regName, void* data, uint8_t length){
     spiTransfer(WRITE_OPERATION, (W_REGISTER | (REGISTER_MASK & regName)), data, length);
 }
 void spiTransfer(SpiTransferType transferType, uint8_t regName, void* data, uint8_t length){
-    uint8_t* intData = data;
+    uint8_t* intData = (uint8_t *) data;
 
     cli(); // Prevent an interrupt from interferring with the communication.
-    {
-        PORTB &= (~(1 << _csnPin));
-        // Signal radio to listen to the SPI bus.
-        // Transfer with the Arduino SPI library.
-            spi_master_init(NRF_spi_settings);
-            spi_transfer(regName);
-            for (uint8_t i = 0; i < length; ++i) {
-                uint8_t newData = spi_transfer(intData[i]);
-                if (transferType == READ_OPERATION) { intData[i] = newData; }
-            }
-        
-        DDRB |= (1 << _csnPin); // Stop radio from listening to the SPI bus.
+    
+    // Signal radio to listen to the SPI bus.
+    // Transfer with the Arduino SPI library.
+    //spi_master_init(NRF_spi_settings);
+    PORTB &= (~(1 << _csnPin));
+    spi_master_init(NRF_spi_settings);
+    spi_transfer(regName);
+    for (uint8_t i = 0; i < length; ++i) {
+        uint8_t newData = spi_transfer(intData[i]);
+        if (transferType == READ_OPERATION) { intData[i] = newData; }
     }
-
+    spi_un_init();//Stop using SPI bus
+    PORTB |= (1 << _csnPin); // Stop radio from listening to the SPI bus.
+    
+/*spi_master_init(MFRC522_spi_settings);	// Set the settings to work with SPI bus
+	MFRC522_ENABLE_CS();		// Select slave
+	spi_transceiver(reg);						// MSB == 0 is for writing. LSB is not used in address. Datasheet section 8.1.2.3.
+	spi_transceiver(value);
+	MFRC522_DISABLE_CS();		// Release slave again
+	spi_un_init(); // Stop using the SPI bus*/
     sei();
 
 }
+void prepForTx(uint8_t toRadioId, SendType sendType){
+    if (_lastToRadioId != toRadioId)
+    {
+        _lastToRadioId = toRadioId;
+
+        // TX pipe address sets the destination radio for the data.
+        // RX pipe 0 is special and needs the same address in order to receive ACK packets from the destination radio.
+        uint8_t address[5] = { ADDRESS_PREFIX[0], ADDRESS_PREFIX[1], ADDRESS_PREFIX[2], ADDRESS_PREFIX[3], toRadioId };
+        writeRegister(TX_ADDR, &address, 5);
+        writeRegister(RX_ADDR_P0, &address, 5);
+    }
+
+    // Ensure radio is ready for TX operation.
+    uint8_t configReg = readRegisterName(CONFIG);
+    uint8_t readyForTx = configReg == (CONFIG_REG_SETTINGS_FOR_RX_MODE & ~(1 << PRIM_RX));
+    if (!readyForTx)
+    {
+        // Put radio into Standby-I mode in order to transition into TX mode.
+        PORTB &= (~(1 << _cePin));
+        configReg = CONFIG_REG_SETTINGS_FOR_RX_MODE & ~(1 << PRIM_RX);
+        writeRegisterName(CONFIG, configReg);
+        _delay_ms(POWERDOWN_TO_RXTX_MODE_MILLIS);
+    }
+
+    uint8_t fifoReg = readRegisterName(FIFO_STATUS);
+
+    // If RX buffer is full and we require an ACK, clear it so we can receive the ACK response.
+    uint8_t rxBufferIsFull = fifoReg & (1 << RX_FULL);
+    if (sendType == REQUIRE_ACK && rxBufferIsFull)
+    {
+        spiTransfer(WRITE_OPERATION, FLUSH_RX, NULL, 0);
+    }
+    
+    // If TX buffer is full, wait for all queued packets to be sent.
+    uint8_t txBufferIsFull = fifoReg & (1 << FIFO_FULL);
+    if (txBufferIsFull)
+    {
+        waitForTxToComplete();
+    }
+}
+ uint8_t getPipeOfFirstRxPacket(){
+    // The pipe number is bits 3, 2, and 1.  So B1110 masks them and we shift right by 1 to get the pipe number.
+    // 000-101 = Data Pipe Number
+    //     110 = Not Used
+    //     111 = RX FIFO Empty
+    return (readRegisterName(STATUS_NRF) & 0b1110) >> 1;
+ }
+uint8_t getRxPacketLength(){
+    // Read the length of the first data packet sitting in the RX buffer.
+    uint8_t dataLength;
+    spiTransfer(READ_OPERATION, R_RX_PL_WID, &dataLength, 1);
+
+    // Verify the data length is valid (0 - 32 bytes).
+    if (dataLength > 32)
+    {
+        spiTransfer(WRITE_OPERATION, FLUSH_RX, NULL, 0); // Clear invalid data in the RX buffer.
+        writeRegisterName(STATUS_NRF, readRegisterName(STATUS_NRF) | (1 << TX_DS) | (1 << MAX_RT) | (1 << RX_DR));
+        return 0;
+    }
+    else
+    {
+        return dataLength;
+    }
+}
+void addAckData(void *data, uint8_t length, uint8_t removeExistingAcks){
+    if (removeExistingAcks)
+    {
+        spiTransfer(WRITE_OPERATION, FLUSH_TX, NULL, 0); // Clear the TX buffer.
+    }
+    
+    // Add the packet to the TX buffer for pipe 1, the pipe used to receive packets from radios that
+    // send us data.  When we receive the next transmission from a radio, we'll provide this ACK data in the
+    // auto-acknowledgment packet that goes back.
+    spiTransfer(WRITE_OPERATION, (W_ACK_PAYLOAD | 1), data, length);
+}
+void discardData(uint8_t unexpectedDataLength){
+    // Read data from the RX buffer.
+    uint8_t data[unexpectedDataLength];
+    spiTransfer(READ_OPERATION, R_RX_PAYLOAD, &data, unexpectedDataLength);
+
+    // Clear data received flag.
+    uint8_t statusReg = readRegisterName(STATUS_NRF);
+    if (statusReg & (1 << RX_DR))
+    {
+        writeRegisterName(STATUS_NRF, statusReg | (1 << RX_DR));
+    }
+}
+uint8_t hasAckData(){
+    // If we have a pipe 0 packet sitting at the top of the RX buffer, we have auto-acknowledgment data.
+    // We receive ACK data from other radios using the pipe 0 address.
+    if (getPipeOfFirstRxPacket() == 0)
+    {
+        return getRxPacketLength(); // Return the length of the data packet in the RX buffer.
+    }
+    else
+    {
+        return 0;
+    }
+}
+uint8_t hasData(uint8_t usingInterrupts){
+    // If using the same pins for CE and CSN, we need to ensure CE is left HIGH long enough to receive data.
+    // If we don't limit the calling program, CE could be LOW so often that no data packets can be received.
+    if (!_usingSeparateCeAndCsnPins)
+    {
+        if (usingInterrupts)
+        {
+            // Since the calling program is using interrupts, we can trust that it only calls hasData when an
+            // interrupt is received, meaning only when data is received.  So we don't need to limit it.
+        }
+        else
+        {
+            uint8_t giveRadioMoreTimeToReceive = main_timer_now() - _microsSinceLastDataCheck < _maxHasDataIntervalMicros;
+            if (giveRadioMoreTimeToReceive)
+            {
+                return 0; // Prevent the calling program from forcing us to bring CE low, making the radio stop receiving.
+            }
+            else
+            {
+                _microsSinceLastDataCheck = main_timer_now();
+            }
+        }
+    }
+    uint8_t notInRxMode = readRegisterName(CONFIG) != CONFIG_REG_SETTINGS_FOR_RX_MODE;
+    if (notInRxMode)
+    {
+        startRx();
+    }
+
+    // If we have a pipe 1 packet sitting at the top of the RX buffer, we have data.
+    if (getPipeOfFirstRxPacket() == 1)
+    {
+        return getRxPacketLength(); // Return the length of the data packet in the RX buffer.
+    }
+    else
+    {
+        return 0;
+    }
+}
+uint8_t hasDataISR(){
+    // This method should be used inside an interrupt handler for the radio's IRQ pin to bypass
+    // the limit on how often the radio is checked for data.  This optimization greatly increases
+    // the receiving bitrate when CE and CSN share the same pin.
+    return hasData(1);
+}
+
+
+uint8_t send(uint8_t toRadioId, void *data, uint8_t length, SendType sendType){
+    prepForTx(toRadioId, sendType);
+
+    // Clear any previously asserted TX success or max retries flags.
+    writeRegisterName(STATUS_NRF, (1 << TX_DS) | (1 << MAX_RT));
+    
+    // Add data to the TX buffer, with or without an ACK request.
+    if (sendType == NO_ACK) { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD_NO_ACK, data, length); }
+    else                    { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD       , data, length); }
+
+    uint8_t result = waitForTxToComplete();
+    return result;
+}
+void startSend(uint8_t toRadioId, void *data, uint8_t length, SendType sendType){
+    prepForTx(toRadioId, sendType);
+    
+    // Add data to the TX buffer, with or without an ACK request.
+    if (sendType == NO_ACK) { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD_NO_ACK, data, length); }
+    else                    { spiTransfer(WRITE_OPERATION, W_TX_PAYLOAD       , data, length); }
+    
+    // Start transmission.
+    // If we have separate pins for CE and CSN, CE will be LOW and we must pulse it to send the packet.
+    if (_usingSeparateCeAndCsnPins)
+    {
+        PORTB |= (1 << _cePin);
+        _delay_us(CE_TRANSMISSION_MICROS);
+        PORTB &= ~(1 << _cePin);
+    }
+}
+void whatHappened(uint8_t *txOk, uint8_t *txFail, uint8_t *rxReady){
+    uint8_t statusReg = readRegisterName(STATUS_NRF);
+    
+    *txOk = statusReg & (1 << TX_DS);
+    *txFail = statusReg & (1 << MAX_RT);
+    *rxReady = statusReg & (1 << RX_DR);
+    
+    // When we need to see interrupt flags, we disable the logic here which clears them.
+    // Programs that have an interrupt handler for the radio's IRQ pin will use 'whatHappened'
+    // and if we don't disable this logic, it's not possible for us to check these flags.
+    if (_resetInterruptFlags)
+    {
+        writeRegisterName(STATUS_NRF, (1 << TX_DS) | (1 << MAX_RT) | (1 << RX_DR));
+    }
+}
+void powerDown(){
+    // If we have separate CE and CSN pins, we can gracefully transition into Power Down mode by first entering Standby-I mode.
+    if (_usingSeparateCeAndCsnPins)
+    {
+        PORTB &= ~(1 << _cePin);
+    }
+    
+    // Turn off the radio.
+    writeRegisterName(CONFIG, readRegisterName(CONFIG) & ~(1 << PWR_UP));
+}
+
+
 #endif
