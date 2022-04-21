@@ -8,7 +8,7 @@
 #include<stdint.h>
 #include<stdio.h>
 typedef struct {
-    int32_t num;
+    uint32_t num;
     uint64_t mod;
 }modint;
 ////////////////////////////////////////////////////////////

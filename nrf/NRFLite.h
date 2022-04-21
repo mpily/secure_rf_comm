@@ -136,6 +136,10 @@ uint8_t radio_init(uint8_t radioId, uint8_t cePin, uint8_t csnPin, Bitrates bitr
     uint8_t success = initRadio(radioId, bitrate, channel);
     return success;
 }
+void switch_channels(uint8_t channel){
+	if (channel > MAX_NRF_CHANNEL) { channel = MAX_NRF_CHANNEL; }
+    writeRegisterName(RF_CH, channel);	
+}
 uint8_t initRadio(uint8_t radioId, Bitrates bitrate, uint8_t channel)
 {
     _lastToRadioId = -1;
@@ -284,48 +288,7 @@ void readData (void * data){
         writeRegisterName(STATUS_NRF, statusReg | (1 << RX_DR));
     }
 }
-void printDetails(){
-    printRegister("CONFIG", readRegisterName(CONFIG));
-    printRegister("EN_AA", readRegisterName(EN_AA));
-    printRegister("EN_RXADDR", readRegisterName(EN_RXADDR));
-    printRegister("SETUP_AW", readRegisterName(SETUP_AW));
-    printRegister("SETUP_RETR", readRegisterName(SETUP_RETR));
-    printRegister("RF_CH", readRegisterName(RF_CH));
-    printRegister("RF_SETUP", readRegisterName(RF_SETUP));
-    printRegister("STATUS", readRegisterName(STATUS_NRF));
-    printRegister("OBSERVE_TX", readRegisterName(OBSERVE_TX));
-    printRegister("RX_PW_P0", readRegisterName(RX_PW_P0));
-    printRegister("RX_PW_P1", readRegisterName(RX_PW_P1));
-    printRegister("FIFO_STATUS", readRegisterName(FIFO_STATUS));
-    printRegister("DYNPD", readRegisterName(DYNPD));
-    printRegister("FEATURE", readRegisterName(FEATURE));
-    
-    uint8_t data[5];
-    char msg[] = "TX_ADDR ";
-    readRegister(TX_ADDR, &data, 5);
-    
-}
-void printRegister(const char name[], uint8_t regName){
-    //todo
-    char buffer[20];
-    itoa(regName,buffer,16);
-    lcd_print(name);
-    _delay_ms(500);
-    lcd_clear();
-    lcd_print(buffer);
-    _delay_ms(500);
-    lcd_clear();
-}
-void assert(uint8_t fact){
-	if(fact){
-		return;
-	}
-	else{
-		lcd_clear();
-		lcd_print("not_true");
-		while(1);
-	}
-}
+
 uint8_t scanChannel(uint8_t channel, uint8_t measurementCount){
     uint8_t notInRxMode = readRegisterName(CONFIG) != CONFIG_REG_SETTINGS_FOR_RX_MODE;
     if(notInRxMode){
@@ -593,6 +556,53 @@ void powerDown(){
     // Turn off the radio.
     writeRegisterName(CONFIG, readRegisterName(CONFIG) & ~(1 << PWR_UP));
 }
+////////////////////GRAVEYARD//////////////////////////
+//Below are debugging functions that are put aside to reduce the space taken by the code/////////////////////////////////////////
+/*
+void printDetails(){
+    printRegister("CONFIG", readRegisterName(CONFIG));
+    printRegister("EN_AA", readRegisterName(EN_AA));
+    printRegister("EN_RXADDR", readRegisterName(EN_RXADDR));
+    printRegister("SETUP_AW", readRegisterName(SETUP_AW));
+    printRegister("SETUP_RETR", readRegisterName(SETUP_RETR));
+    printRegister("RF_CH", readRegisterName(RF_CH));
+    printRegister("RF_SETUP", readRegisterName(RF_SETUP));
+    printRegister("STATUS", readRegisterName(STATUS_NRF));
+    printRegister("OBSERVE_TX", readRegisterName(OBSERVE_TX));
+    printRegister("RX_PW_P0", readRegisterName(RX_PW_P0));
+    printRegister("RX_PW_P1", readRegisterName(RX_PW_P1));
+    printRegister("FIFO_STATUS", readRegisterName(FIFO_STATUS));
+    printRegister("DYNPD", readRegisterName(DYNPD));
+    printRegister("FEATURE", readRegisterName(FEATURE));
+    
+    uint8_t data[5];
+    char msg[] = "TX_ADDR ";
+    readRegister(TX_ADDR, &data, 5);
+    
+}
+void printRegister(const char name[], uint8_t regName){
+    //todo
+    char buffer[20];
+    itoa(regName,buffer,16);
+    lcd_print(name);
+    _delay_ms(500);
+    lcd_clear();
+    lcd_print(buffer);
+    _delay_ms(500);
+    lcd_clear();
+}
+void assert(uint8_t fact){
+	if(fact){
+		return;
+	}
+	else{
+		lcd_clear();
+		lcd_print("not_true");
+		while(1);
+	}
+}
 
+
+*/
 
 #endif

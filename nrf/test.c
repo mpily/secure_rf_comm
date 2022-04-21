@@ -62,19 +62,48 @@ void scan_channel_test(){
     printDetails();
     while(1);
 }
+void my_itoa(uint32_t num, char * arr){
+    for(int i = 0; i < 10; ++i){
+        arr[i] = 0;
+    }
+    int pos = 0;
+    if(num == 0){
+        arr[pos] = '0';
+    }
+    while(num){
+        arr[pos] = '0' + (num % 10);
+        num/= 10;
+        pos ++;
+    }
+    pos --;
+    int i = 0;
+    while(i < pos){
+        char tmp = arr[i];
+        arr[i] = arr[pos];
+        arr[pos] = tmp;
+        pos --;
+        i ++;
+    }
+    lcd_clear();
+    lcd_print("done converting");
+    _delay_ms(200);
+    lcd_clear();
+    lcd_print(arr);
+    _delay_ms(500);
+}
 void checkRadio(){
-	lcd_clear();
-	lcd_print("receiving hello");
+	//lcd_clear();
+	//lcd_print("receiving hello");
     while(hasData(0)){
         RadioPacket new_packet;
         readData(&new_packet);
         if(new_packet.PacketType == HELLO){
             char rec_data[10];
-            {
-                itoa(new_packet.theData,rec_data,10);
-                lcd_clear();
-                lcd_print(rec_data);
-            }
+            my_itoa(new_packet.theData,rec_data);
+            lcd_print("definitely received");
+            lcd_clear();
+            lcd_print(rec_data);
+            _delay_ms(100);    
         }
     }
 }

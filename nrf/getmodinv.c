@@ -1,6 +1,4 @@
 #include<stdio.h>
-#include<stdint.h>
-#define int int64_t
 const int mod = 239270451;
 int extended_euclid(int a, int b, int * x, int * y){//get gcd using extended euclid algorithm
     if (a == 0){
@@ -14,16 +12,14 @@ int extended_euclid(int a, int b, int * x, int * y){//get gcd using extended euc
  
     return g;
 }
-int32_t main(){
-    int m = 4288547088ULL;
+int main(){
     int x, y;
-    int g = extended_euclid(5,4288547088ULL,&x,&y);
+    int g = extended_euclid(3,239270451,x,y);
     if(g != 1){
-        
-        printf("there is no modulo inverse %lld \n", g);
+        printf("there is no modulo inverse\n");
     }
     else{
         x = (x % m + m) % m;
-        printf("modulo inverse is %lld", x);
+        printf("modulo inverse is %d", x);
     }
 }

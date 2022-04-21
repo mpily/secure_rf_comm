@@ -72,14 +72,6 @@ uint8_t typing_number;//boolean to tell whether we are typing a number or a mess
 volatile uint8_t pressed_count = 0;
 
 
-
-
-//Prototype definition of function that runs when full password is entered
-void validate_password();
-//Prototype definition of function that runs when another valid key press is detected
-void detected_new_press();
-
-
 void get_pos(char x, uint8_t * row, uint8_t* col){
     //given a character ,x, it returns to us the row and column they belong to in character order array
     for(int i = 0; i < 12; ++i){
@@ -157,6 +149,7 @@ void interpret_key(char key){//when a key is typed, decide what to do with it
 	else if(key == 'D'){//done writing message schedule to send it;
 		update_message();
 		msg_length = pressed_count;
+		clear_pressed();
 		pressed_count = 0;
 	}
 	else{
