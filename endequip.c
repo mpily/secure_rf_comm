@@ -43,7 +43,7 @@ uint8_t recently_received;
 uint8_t await_channel_info = 0;
 uint8_t await_diffie_info = 0;
 ///////////////////debugging functions /////////////////////////
-void my_itoa(uint32_t num, char * arr){
+/*void my_itoa(uint32_t num, char * arr){
     for(int i = 0; i < 10; ++i){
         arr[i] = 0;
     }
@@ -69,7 +69,7 @@ void my_itoa(uint32_t num, char * arr){
     lcd_print("--");
     lcd_print(arr);
     _delay_ms(500);
-}
+}*/
 ////////////////////////////////////////////////////////////
 uint8_t send_init_message(){
     //lcd_clear();
@@ -172,7 +172,14 @@ void handle_e2e_msg(){
 		}
 	}
 	received_msg[20] = 0;
-	recently_received = 1;
+	//recently_received = 1;
+	lcd_clear();
+	lcd_print("from : ");
+	char tgt[3] = {'0' + received_id,0,0};
+	lcd_print(tgt);
+	lcd_second_line();
+	lcd_print(received_msg);
+	_delay_ms(1000);
 }
 void checkRadio(){
     while(hasData(0)){
@@ -208,7 +215,7 @@ void init_e2e(uint8_t num){
 	send(DESTINATION_RADIO_ID, &init_msg, sizeof(init_msg),REQUIRE_ACK);
 	while(encryption_keys_diffie[num] == 0){
 		checkRadio();
-		lcd_clear();
+		//lcd_clear();
 		//lcd_print("not yet");
 		send(DESTINATION_RADIO_ID, &init_msg, sizeof(init_msg),REQUIRE_ACK);
 		_delay_ms(10);//wait some time then try again
@@ -225,8 +232,11 @@ void send_e2e_msg(){
 	msg_packet.packetType = E2EMSG;
 	msg_packet.intended_final_destination = num_to_send;
 	msg_packet.from_radio_id = RADIO_ID;
-	//TODO RETURN IT init_e2e(num_to_send);
+	init_e2e(num_to_send);
 	msg_length += (4 - (msg_length % 4));//make message length divisible by 4
+	//lcd_clear();
+	//lcd_print("done init encrypt");
+	//_delay_ms(1000);
 	//char arr[20];
 	//for(int i = 0; i < 20; ++i) arr[i] = 0;
 	uint8_t i = 0;
@@ -254,22 +264,25 @@ void send_e2e_msg(){
 	}
 	for(;i < 20; ++i)msg_packet.msg[i] = 0;
 	msg_length = 0;
-	while(send(DESTINATION_RADIO_ID, &msg_packet, sizeof(msg_packet),REQUIRE_ACK)){
+	checkRadio();
+	while(!send(DESTINATION_RADIO_ID, &msg_packet, sizeof(msg_packet),REQUIRE_ACK)){
 		lcd_clear();
 		lcd_print("message not yet sent");
 		_delay_ms(10);
 	}
 	lcd_clear();
 	lcd_print("message sent");
-	_delay_ms(200);
+	checkRadio();//place in receive mode;
+	_delay_ms(20);
 }
 void display_on_lcd(){
 	if(recently_received){
 		lcd_clear();
 		lcd_print(received_msg);
+		_delay_ms(1000);
 		recently_received = 0;
 	}
-	else if(updated){
+	else if(updated && pressed_count){
 		lcd_clear();
 		if(typing_number){
 			lcd_print("target: ");
@@ -280,6 +293,8 @@ void display_on_lcd(){
 			lcd_print(pressed_buttons);
 		}
 		updated = 0;
+		lcd_second_line();
+		lcd_print("typing sth");
 	}
 }
 
